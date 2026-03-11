@@ -47,3 +47,23 @@ Option Render / Railway:
 Notes:
 - Les rooms sont en mémoire: si le serveur redémarre, les parties en cours disparaissent.
 - Pour scaler multi-instances (plusieurs serveurs), il faudrait stocker l’état (Redis) et gérer l’affinité de session.
+
+### OVH (VPS / Public Cloud) avec Docker (recommandé)
+
+Pré-requis: un VPS OVH (Ubuntu 22.04 ou Debian 12) + un nom de domaine (optionnel mais recommandé).
+
+1. Sur OVH: récupère l’IP du serveur et ouvre le firewall (au minimum `22`, `80`, `443`).
+2. DNS: pointe ton domaine vers l’IP (enregistrements `A` / `AAAA`).
+3. SSH sur le serveur puis installe Docker + Compose.
+4. Déploie depuis le repo:
+
+```bash
+git clone https://github.com/Foossa730/La-Pepite-de-l-enfer.git
+cd La-Pepite-de-l-enfer
+
+# Edite Caddyfile et remplace pepite.example.com par ton domaine
+
+docker compose up -d --build
+```
+
+Le reverse-proxy (Caddy) gère HTTPS automatiquement et supporte WebSockets.

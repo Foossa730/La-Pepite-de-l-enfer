@@ -1,0 +1,8 @@
+# Replace `pepite.example.com` with your real domain name.
+pepite.example.com {
+  encode zstd gzip
+
+  # WebSockets are supported automatically by reverse_proxy.
+  reverse_proxy app:3000
+}
+
