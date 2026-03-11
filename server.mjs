@@ -205,12 +205,32 @@ wss.on("connection", (ws) => {
 
       case "start_round": {
         const client = clients.get(ws);
-        if (!client?.roomId) return;
+        if (!client?.roomId) {
+          send(ws, { type: "error", message: "Tu n'es pas dans une partie." });
+          return;
+        }
         const room = rooms.get(client.roomId);
-        if (!room || room.hostId !== client.clientId) return;
-        if (room.phase !== "lobby" && room.phase !== "review") return;
+        if (!room) {
+          send(ws, { type: "error", message: "Partie introuvable." });
+          return;
+        }
+        if (room.hostId !== client.clientId) {
+          send(ws, { type: "error", message: "Seul le Maître du Jeu peut lancer une manche." });
+          return;
+        }
+        if (room.phase !== "lobby" && room.phase !== "review") {
+          send(ws, { type: "error", message: `Impossible de lancer: phase actuelle = ${room.phase}.` });
+          return;
+        }
+        if (room.players.length < 2) {
+          send(ws, { type: "error", message: "Il faut au moins 2 joueurs pour démarrer." });
+          return;
+        }
         const roundIndex = room.round?.index ? room.round.index + 1 : 1;
-        if (roundIndex > room.settings.totalRounds) return;
+        if (roundIndex > room.settings.totalRounds) {
+          send(ws, { type: "error", message: "La partie est terminée (plus de manches disponibles)." });
+          return;
+        }
 
         room.players.forEach((p) => {
           p.url = "";
@@ -226,6 +246,7 @@ wss.on("connection", (ws) => {
         if (room.roundTimer) clearTimeout(room.roundTimer);
         room.roundTimer = setTimeout(() => endRound(room), Math.max(0, room.round.endsAt - now()));
 
+        send(ws, { type: "info", message: `Manche ${roundIndex} lancée.` });
         broadcast(room.id);
         return;
       }

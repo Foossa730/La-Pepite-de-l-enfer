@@ -149,6 +149,11 @@ export const useMpStore = create<MpState & MpActions>((set, get) => {
       if (type === "error") {
         const message = typeof m.message === "string" ? m.message : "Erreur réseau.";
         set({ wsError: message });
+        return;
+      }
+      if (type === "info") {
+        const message = typeof m.message === "string" ? m.message : "";
+        if (message) set({ wsError: message });
       }
     });
 
