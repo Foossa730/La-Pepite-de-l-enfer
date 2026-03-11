@@ -67,3 +67,10 @@ docker compose up -d --build
 ```
 
 Le reverse-proxy (Caddy) gère HTTPS automatiquement et supporte WebSockets.
+
+### Render (gratuit) avec Docker
+
+1. Crée un "Web Service" depuis le repo GitHub (Dockerfile détecté).
+2. Dans les settings Render:
+   - "Environment": pas besoin de définir `PORT` (par défaut `10000`), sinon mets `PORT=10000`
+3. Déploie et utilise l’URL `*.onrender.com`.

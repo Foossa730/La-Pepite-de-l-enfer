@@ -4,7 +4,7 @@ import { WebSocketServer } from "ws";
 import { createRoomId, createRound, endRoundScoring } from "./src/lib/gameLogic.mjs";
 
 const dev = process.env.NODE_ENV !== "production";
-const port = Number(process.env.PORT || 3000);
+const port = Number(process.env.PORT || 10000);
 const host = process.env.HOST || "0.0.0.0";
 
 const app = next({ dev, port, hostname: host });
