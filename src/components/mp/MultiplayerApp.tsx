@@ -318,6 +318,21 @@ function RoundPlay({ room }: { room: RoomState }) {
     setUrl(me?.url || "");
   }, [me?.url]);
 
+  const cleanLocalUrl = url.trim();
+  const cleanServerUrl = (me?.url || "").trim();
+  const urlDirty = cleanLocalUrl !== cleanServerUrl;
+
+  function saveUrl() {
+    submitUrl(cleanLocalUrl);
+  }
+
+  function finishWithUrl() {
+    // Most players will paste then click "Terminer" immediately.
+    // Ensure the URL is submitted before finishing so scoring sees it.
+    submitUrl(cleanLocalUrl);
+    finish();
+  }
+
   const [nowMs, setNowMs] = React.useState(() => Date.now());
   React.useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 250);
@@ -352,12 +367,23 @@ function RoundPlay({ room }: { room: RoomState }) {
         <section className="card rounded-blob p-6">
           <SectionTitle icon={<LinkIcon className="h-5 w-5" />} title="Ton lien" subtitle="Colle l'URL Leboncoin, puis termine." />
           <div className="mt-4 grid gap-2">
-            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.leboncoin.fr/..." />
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onBlur={() => {
+                // Low-friction: auto-save if the user clicks away.
+                if (urlDirty) saveUrl();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") finishWithUrl();
+              }}
+              placeholder="https://www.leboncoin.fr/..."
+            />
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => submitUrl(url)} variant="ghost">
-                Enregistrer le lien
+              <Button onClick={saveUrl} variant="ghost" disabled={!urlDirty}>
+                {urlDirty ? "Enregistrer" : "Enregistré"}
               </Button>
-              <Button onClick={finish} disabled={!me || me.finished} className="ml-auto">
+              <Button onClick={finishWithUrl} disabled={!me || me.finished} className="ml-auto">
                 Terminer
                 <ArrowRight className="h-4 w-4" />
               </Button>
