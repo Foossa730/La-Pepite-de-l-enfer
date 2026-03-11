@@ -187,6 +187,22 @@ wss.on("connection", (ws) => {
         return;
       }
 
+      case "claim_host": {
+        const client = clients.get(ws);
+        if (!client?.roomId) return;
+        const room = rooms.get(client.roomId);
+        if (!room) return;
+        const hostPlayer = getPlayer(room, room.hostId);
+        if (hostPlayer && hostPlayer.connected) {
+          send(ws, { type: "error", message: "Le Maître du Jeu est déjà connecté." });
+          return;
+        }
+        room.hostId = client.clientId;
+        room.updatedAt = now();
+        broadcast(room.id);
+        return;
+      }
+
       case "start_round": {
         const client = clients.get(ws);
         if (!client?.roomId) return;

@@ -197,10 +197,14 @@ function Lobby() {
 function LobbyRoom({ room }: { room: RoomState }) {
   const clientId = useMpStore((s) => s.clientId);
   const host = isHost(room, clientId);
+  const claimHost = useMpStore((s) => s.claimHost);
   const setTimerSec = useMpStore((s) => s.setTimerSec);
   const startRound = useMpStore((s) => s.startRound);
   const nextRound = (room.round?.index ?? 0) + 1;
   const canStart = host && room.players.length >= 2 && nextRound <= room.settings.totalRounds;
+  const hostPlayer = room.players.find((p) => p.id === room.hostId) || null;
+  const hostDisconnected = !!hostPlayer && !hostPlayer.connected;
+  const needPlayers = room.players.length < 2;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pb-12 pt-8 anim-pop">
@@ -237,7 +241,14 @@ function LobbyRoom({ room }: { room: RoomState }) {
               <Timer className="h-4 w-4 text-lbc-orange" />
               <div className="font-title text-2xl font-black">Timer</div>
             </div>
-            <p className="mt-1 text-sm text-lbc-navy/65">Réglable entre 5 et 10 minutes.</p>
+            <p className="mt-1 text-sm text-lbc-navy/65">
+              MJ: <span className="font-semibold">{hostPlayer ? hostPlayer.name : "—"}</span>{" "}
+              {hostPlayer ? (
+                <span className={["ml-2", hostPlayer.connected ? "text-emerald-700" : "text-red-700"].join(" ")}>
+                  ({hostPlayer.connected ? "connecté" : "déconnecté"})
+                </span>
+              ) : null}
+            </p>
 
             <div className="mt-4 rounded-2xl border border-lbc-navy/10 bg-white/70 p-4">
               <div className="flex items-center justify-between gap-3">
@@ -258,10 +269,35 @@ function LobbyRoom({ room }: { room: RoomState }) {
             </div>
 
             <div className="mt-5">
-              <Button onClick={startRound} disabled={!canStart} size="lg" className="w-full">
-                Lancer la manche {nextRound}
-                <ArrowRight className="h-4 w-4" />
-              </Button>
+              {host ? (
+                <>
+                  <Button onClick={startRound} disabled={!canStart} size="lg" className="w-full">
+                    Lancer la manche {nextRound}
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                  {!canStart ? (
+                    <div className="mt-2 text-xs text-lbc-navy/60">
+                      {needPlayers ? "Il faut au moins 2 joueurs pour démarrer." : "La partie est terminée ou invalide."}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="rounded-2xl border border-lbc-navy/10 bg-white/70 p-4 text-sm text-lbc-navy/75">
+                  <div className="font-semibold">En attente</div>
+                  <div className="mt-1">Seul le Maître du Jeu peut lancer la manche.</div>
+                  {hostDisconnected ? (
+                    <div className="mt-3">
+                      <Button onClick={claimHost} variant="primary" className="w-full">
+                        Devenir Maître du Jeu
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                      <div className="mt-2 text-xs text-lbc-navy/60">
+                        L&apos;hôte est déconnecté: quelqu&apos;un doit reprendre la main.
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
         </div>

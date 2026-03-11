@@ -74,6 +74,7 @@ type MpActions = {
   createRoom: () => void;
   joinRoom: (roomId: string) => void;
   leaveRoom: () => void;
+  claimHost: () => void;
 
   setTimerSec: (timerSec: number) => void;
   startRound: () => void;
@@ -188,6 +189,7 @@ export const useMpStore = create<MpState & MpActions>((set, get) => {
       send({ type: "leave_room" });
       set({ room: null });
     },
+    claimHost: () => send({ type: "claim_host" }),
 
     setTimerSec: (timerSec) => send({ type: "set_timer", timerSec }),
     startRound: () => send({ type: "start_round" }),
