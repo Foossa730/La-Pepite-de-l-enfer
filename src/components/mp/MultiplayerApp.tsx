@@ -313,23 +313,67 @@ function RoundPlay({ room }: { room: RoomState }) {
 
   const me = room.players.find((p) => p.id === clientId) || null;
   const [url, setUrl] = React.useState(me?.url || "");
+  const round = room.round!;
+
+  const criteriaKeys = React.useMemo(() => new Set(round.criteria.map((c) => c.key)), [round.criteria]);
+
+  const [manualEnabled, setManualEnabled] = React.useState(false);
+  const [manual, setManual] = React.useState<{ price: string; km: string; hp: string; year: string }>({
+    price: "",
+    km: "",
+    hp: "",
+    year: ""
+  });
 
   React.useEffect(() => {
     setUrl(me?.url || "");
   }, [me?.url]);
 
+  React.useEffect(() => {
+    // Prefill from server state if present (useful after refresh / reconnect).
+    const m = me?.manual || null;
+    if (!m) return;
+    setManualEnabled(true);
+    setManual({
+      price: m.price == null ? "" : String(m.price),
+      km: m.km == null ? "" : String(m.km),
+      hp: m.hp == null ? "" : String(m.hp),
+      year: m.year == null ? "" : String(m.year)
+    });
+  }, [me?.manual]);
+
   const cleanLocalUrl = url.trim();
   const cleanServerUrl = (me?.url || "").trim();
   const urlDirty = cleanLocalUrl !== cleanServerUrl;
 
+  function parseNum(input: string): number | null {
+    const s = String(input || "")
+      .trim()
+      .replace(/\s+/g, "")
+      .replace(",", ".");
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function buildManualPayload(): { price?: number | null; km?: number | null; hp?: number | null; year?: number | null } | null {
+    if (!manualEnabled) return null;
+    return {
+      price: parseNum(manual.price),
+      km: parseNum(manual.km),
+      hp: parseNum(manual.hp),
+      year: parseNum(manual.year)
+    };
+  }
+
   function saveUrl() {
-    submitUrl(cleanLocalUrl);
+    submitUrl(cleanLocalUrl, buildManualPayload());
   }
 
   function finishWithUrl() {
     // Most players will paste then click "Terminer" immediately.
     // Ensure the URL is submitted before finishing so scoring sees it.
-    submitUrl(cleanLocalUrl);
+    submitUrl(cleanLocalUrl, buildManualPayload());
     finish();
   }
 
@@ -339,7 +383,6 @@ function RoundPlay({ room }: { room: RoomState }) {
     return () => window.clearInterval(id);
   }, []);
 
-  const round = room.round!;
   const remainingSec = Math.max(0, Math.ceil((round.endsAt - nowMs) / 1000));
   const urgent = remainingSec <= 20;
   const ratio = Math.max(0, Math.min(1, remainingSec / Math.max(1, room.settings.timerSec)));
@@ -365,7 +408,11 @@ function RoundPlay({ room }: { room: RoomState }) {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_420px]">
         <section className="card rounded-blob p-6">
-          <SectionTitle icon={<LinkIcon className="h-5 w-5" />} title="Ton lien" subtitle="Colle l'URL Leboncoin, puis termine." />
+          <SectionTitle
+            icon={<LinkIcon className="h-5 w-5" />}
+            title="Ton lien"
+            subtitle="Colle l'URL. Optionnel: saisis les infos de l'annonce pour un scoring exact."
+          />
           <div className="mt-4 grid gap-2">
             <Input
               value={url}
@@ -379,6 +426,55 @@ function RoundPlay({ room }: { room: RoomState }) {
               }}
               placeholder="https://www.leboncoin.fr/..."
             />
+
+            <label className="mt-2 flex items-center gap-2 rounded-2xl border border-lbc-navy/10 bg-white/60 px-3 py-2 text-sm text-lbc-navy/80">
+              <input
+                type="checkbox"
+                checked={manualEnabled}
+                onChange={(e) => setManualEnabled(e.target.checked)}
+                className="h-4 w-4 accent-[rgb(var(--lbc-orange))]"
+              />
+              <span className="font-semibold">Saisie manuelle (recommandé)</span>
+              <span className="ml-auto text-xs text-lbc-navy/60">copie depuis l’annonce</span>
+            </label>
+
+            {manualEnabled ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {criteriaKeys.has("price") ? (
+                  <Input
+                    value={manual.price}
+                    onChange={(e) => setManual((m) => ({ ...m, price: e.target.value }))}
+                    placeholder="Prix (€)"
+                    inputMode="numeric"
+                  />
+                ) : null}
+                {criteriaKeys.has("km") ? (
+                  <Input
+                    value={manual.km}
+                    onChange={(e) => setManual((m) => ({ ...m, km: e.target.value }))}
+                    placeholder="Kilométrage (km)"
+                    inputMode="numeric"
+                  />
+                ) : null}
+                {criteriaKeys.has("hp") ? (
+                  <Input
+                    value={manual.hp}
+                    onChange={(e) => setManual((m) => ({ ...m, hp: e.target.value }))}
+                    placeholder="Puissance (ch)"
+                    inputMode="numeric"
+                  />
+                ) : null}
+                {criteriaKeys.has("year") ? (
+                  <Input
+                    value={manual.year}
+                    onChange={(e) => setManual((m) => ({ ...m, year: e.target.value }))}
+                    placeholder="Année"
+                    inputMode="numeric"
+                  />
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="flex flex-wrap gap-2">
               <Button onClick={saveUrl} variant="ghost" disabled={!urlDirty}>
                 {urlDirty ? "Enregistrer" : "Enregistré"}
@@ -439,7 +535,7 @@ function Review({ room }: { room: RoomState }) {
               <div className="font-title truncate text-2xl font-black">{player.name}</div>
               <div className="mt-1 text-sm text-lbc-navy/65">
                 Score manche: <span className="font-black text-lbc-navy">{player.roundScore ?? 0}</span> pts
-                {player.roundResult?.valid ? null : <span className="ml-2 text-red-700 font-semibold">(hors tolérance)</span>}
+                {player.roundResult?.valid ? null : <span className="ml-2 text-red-700 font-semibold">(hors tolérance, pénalité)</span>}
               </div>
             </div>
             {host ? (
@@ -453,9 +549,48 @@ function Review({ room }: { room: RoomState }) {
           </div>
 
           <div className="mt-4 rounded-blob border border-lbc-navy/10 bg-white/60 p-4 text-sm text-lbc-navy/75">
-            <div className="font-semibold">URL</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-semibold">URL</div>
+              <Chip strong={player.roundResult?.source === "manual"}>
+                {player.roundResult?.source === "manual"
+                  ? "manuel"
+                  : player.roundResult?.source === "simulated"
+                    ? "simulé"
+                    : "—"}
+              </Chip>
+            </div>
             <div className="mt-1 break-words text-xs">{player.roundResult?.url || "—"}</div>
           </div>
+
+          {player.roundResult?.url ? (
+            <div className="mt-4 rounded-blob border border-lbc-navy/10 bg-white/60 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-lbc-navy">Annonce</div>
+                <a
+                  className="focus-ring rounded-xl bg-white/70 px-3 py-2 text-xs font-black text-lbc-navy hover:bg-white"
+                  href={player.roundResult.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Ouvrir
+                </a>
+              </div>
+              <div className="mt-3 overflow-hidden rounded-2xl border border-lbc-navy/10 bg-white">
+                <div className="aspect-[16/10] w-full">
+                  <iframe
+                    title={`Annonce ${player.name}`}
+                    src={player.roundResult.url}
+                    className="h-full w-full"
+                    sandbox="allow-forms allow-scripts allow-popups allow-top-navigation-by-user-activation"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-lbc-navy/60">
+                Si l&apos;aperçu reste blanc, c&apos;est normal: Leboncoin bloque souvent l&apos;intégration. Utilise “Ouvrir”.
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {player.roundResult?.extracted ? (

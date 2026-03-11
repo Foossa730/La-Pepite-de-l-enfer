@@ -24,6 +24,7 @@ export type RoundResult = {
   extracted: { price: number; km: number; hp: number; year: number } | null;
   valid: boolean;
   totalScore: number;
+  source?: "none" | "manual" | "simulated";
   breakdown: Array<{
     key: string;
     label: string;
@@ -42,6 +43,7 @@ export type PlayerState = {
   name: string;
   connected: boolean;
   url: string;
+  manual?: { price: number | null; km: number | null; hp: number | null; year: number | null } | null;
   finished: boolean;
   totalScore: number;
   roundScore?: number;
@@ -78,7 +80,7 @@ type MpActions = {
 
   setTimerSec: (timerSec: number) => void;
   startRound: () => void;
-  submitUrl: (url: string) => void;
+  submitUrl: (url: string, manual?: { price?: number | null; km?: number | null; hp?: number | null; year?: number | null } | null) => void;
   finish: () => void;
   reviewNext: () => void;
 
@@ -198,7 +200,7 @@ export const useMpStore = create<MpState & MpActions>((set, get) => {
 
     setTimerSec: (timerSec) => send({ type: "set_timer", timerSec }),
     startRound: () => send({ type: "start_round" }),
-    submitUrl: (url) => send({ type: "submit_url", url }),
+    submitUrl: (url, manual) => send({ type: "submit_url", url, manual: manual || null }),
     finish: () => send({ type: "finish" }),
     reviewNext: () => send({ type: "review_next" }),
 

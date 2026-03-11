@@ -124,6 +124,7 @@ wss.on("connection", (ws) => {
               name: client.name,
               connected: true,
               url: "",
+              manual: null,
               finished: false,
               totalScore: 0
             }
@@ -158,6 +159,7 @@ wss.on("connection", (ws) => {
             name: client.name,
             connected: true,
             url: "",
+            manual: null,
             finished: false,
             totalScore: 0
           });
@@ -239,6 +241,7 @@ wss.on("connection", (ws) => {
 
         room.players.forEach((p) => {
           p.url = "";
+          p.manual = null;
           p.finished = false;
           p.roundScore = 0;
           p.roundResult = null;
@@ -250,7 +253,13 @@ wss.on("connection", (ws) => {
         room.updatedAt = now();
         const prev = roomTimers.get(room.id);
         if (prev) clearTimeout(prev);
-        roomTimers.set(room.id, setTimeout(() => endRound(room), Math.max(0, room.round.endsAt - now())));
+        roomTimers.set(
+          room.id,
+          setTimeout(() => {
+            endRound(room);
+            broadcast(room.id);
+          }, Math.max(0, room.round.endsAt - now()))
+        );
 
         send(ws, { type: "info", message: `Manche ${roundIndex} lancée.` });
         broadcast(room.id);
@@ -265,6 +274,23 @@ wss.on("connection", (ws) => {
         const player = getPlayer(room, client.clientId);
         if (!player) return;
         player.url = String(msg.url || "").trim().slice(0, 500);
+        const manual = msg.manual && typeof msg.manual === "object" ? msg.manual : null;
+        if (manual) {
+          const toNum = (v) => {
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+          };
+          const payload = {
+            price: toNum(manual.price),
+            km: toNum(manual.km),
+            hp: toNum(manual.hp),
+            year: toNum(manual.year)
+          };
+          const hasAny = Object.values(payload).some((v) => v !== null);
+          player.manual = hasAny ? payload : null;
+        } else {
+          player.manual = null;
+        }
         broadcast(room.id);
         return;
       }

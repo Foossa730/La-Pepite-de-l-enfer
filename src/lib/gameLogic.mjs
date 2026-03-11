@@ -127,18 +127,25 @@ function clamp01(x) {
 
 function scoreMax({ value, target, tol }) {
   const allowedMax = target * (1 + tol);
-  const maxDeviation = target * tol;
   const within = value <= allowedMax;
-  const proximity = 1 - Math.abs(value - target) / Math.max(1, maxDeviation);
-  return { within, score: Math.round(100 * clamp01(proximity)), allowed: { min: 0, max: Math.round(allowedMax) } };
+  if (!within) return { within: false, score: 0, allowed: { min: 0, max: Math.round(allowedMax) } };
+  // Being under the max is "good"; score 100 if <= target, then degrade to 0 at allowedMax.
+  if (value <= target) return { within: true, score: 100, allowed: { min: 0, max: Math.round(allowedMax) } };
+  const denom = Math.max(1, allowedMax - target);
+  const t = 1 - (value - target) / denom;
+  return { within: true, score: Math.round(100 * clamp01(t)), allowed: { min: 0, max: Math.round(allowedMax) } };
 }
 
 function scoreMin({ value, target, tol }) {
   const allowedMin = target * (1 - tol);
-  const maxDeviation = target * tol;
   const within = value >= allowedMin;
-  const proximity = 1 - Math.abs(value - target) / Math.max(1, maxDeviation);
-  return { within, score: Math.round(100 * clamp01(proximity)), allowed: { min: Math.round(allowedMin), max: Infinity } };
+  const allowed = { min: Math.round(allowedMin), max: Number.MAX_SAFE_INTEGER };
+  if (!within) return { within: false, score: 0, allowed };
+  // Being above the min is "good"; score 100 if >= target, then degrade to 0 at allowedMin.
+  if (value >= target) return { within: true, score: 100, allowed };
+  const denom = Math.max(1, target - allowedMin);
+  const t = 1 - (target - value) / denom;
+  return { within: true, score: Math.round(100 * clamp01(t)), allowed };
 }
 
 function scoreRange({ value, target, tol }) {
@@ -146,14 +153,18 @@ function scoreRange({ value, target, tol }) {
   const allowedMin = target.min - span * tol;
   const allowedMax = target.max + span * tol;
   const within = value >= allowedMin && value <= allowedMax;
-  const mid = (target.min + target.max) / 2;
-  const maxDeviation = (allowedMax - allowedMin) / 2;
-  const proximity = 1 - Math.abs(value - mid) / Math.max(1, maxDeviation);
-  return {
-    within,
-    score: Math.round(100 * clamp01(proximity)),
-    allowed: { min: Math.round(allowedMin), max: Math.round(allowedMax) }
-  };
+  const allowed = { min: Math.round(allowedMin), max: Math.round(allowedMax) };
+  if (!within) return { within: false, score: 0, allowed };
+  // Score 100 inside the target range, then degrade to 0 toward the tolerance edges.
+  if (value >= target.min && value <= target.max) return { within: true, score: 100, allowed };
+  if (value < target.min) {
+    const denom = Math.max(1, target.min - allowedMin);
+    const t = 1 - (target.min - value) / denom;
+    return { within: true, score: Math.round(100 * clamp01(t)), allowed };
+  }
+  const denom = Math.max(1, allowedMax - target.max);
+  const t = 1 - (value - target.max) / denom;
+  return { within: true, score: Math.round(100 * clamp01(t)), allowed };
 }
 
 export function scoreSubmission(round, extracted) {
@@ -176,7 +187,8 @@ export function scoreSubmission(round, extracted) {
 
   const valid = breakdown.every((b) => b.within);
   const avg = breakdown.reduce((acc, b) => acc + b.score, 0) / Math.max(1, breakdown.length);
-  const totalScore = valid ? Math.round(avg) : 0;
+  // Keep the tolerance rule meaningful, but still give "consolation points" so the leaderboard moves.
+  const totalScore = Math.round(avg * (valid ? 1 : 0.35));
 
   return { valid, totalScore, breakdown };
 }
@@ -188,14 +200,26 @@ export function endRoundScoring(room) {
     const url = (player.url || "").trim();
     if (!url) {
       player.roundScore = 0;
-      player.roundResult = { url, extracted: null, valid: false, totalScore: 0, breakdown: [] };
+      player.roundResult = { url, extracted: null, valid: false, totalScore: 0, breakdown: [], source: "none" };
       continue;
     }
-    const extracted = simulateExtraction(url);
+    // Default: deterministic simulated extraction from URL.
+    // If the player provided manual data, we overlay it on top for "real" scoring.
+    const base = simulateExtraction(url);
+    const manual = player.manual && typeof player.manual === "object" ? player.manual : null;
+    const hasManual =
+      !!manual &&
+      (Number.isFinite(manual?.price) || Number.isFinite(manual?.km) || Number.isFinite(manual?.hp) || Number.isFinite(manual?.year));
+    const extracted = {
+      ...base,
+      ...(Number.isFinite(manual?.price) ? { price: Math.round(manual.price) } : null),
+      ...(Number.isFinite(manual?.km) ? { km: Math.round(manual.km) } : null),
+      ...(Number.isFinite(manual?.hp) ? { hp: Math.round(manual.hp) } : null),
+      ...(Number.isFinite(manual?.year) ? { year: Math.round(manual.year) } : null)
+    };
     const scored = scoreSubmission(round, extracted);
     player.roundScore = scored.totalScore;
-    player.roundResult = { url, extracted, ...scored };
+    player.roundResult = { url, extracted, ...scored, source: hasManual ? "manual" : "simulated" };
     player.totalScore = (player.totalScore || 0) + player.roundScore;
   }
 }
-
