@@ -16,13 +16,20 @@ const handle = app.getRequestHandler();
  */
 const rooms = new Map(); // roomId -> room
 const clients = new Map(); // ws -> { clientId, roomId }
+// Keep non-serializable Node.js timers out of `room` (JSON.stringify would crash).
+const roomTimers = new Map(); // roomId -> Timeout
 
 function now() {
   return Date.now();
 }
 
 function send(ws, payload) {
-  ws.send(JSON.stringify(payload));
+  try {
+    ws.send(JSON.stringify(payload));
+  } catch (err) {
+    // Never crash the process due to a bad payload; log and move on.
+    console.error("WS send failed:", err?.message || err);
+  }
 }
 
 function broadcast(roomId) {
@@ -55,10 +62,9 @@ function everyoneFinished(room) {
 
 function endRound(room) {
   if (room.phase !== "round") return;
-  if (room.roundTimer) {
-    clearTimeout(room.roundTimer);
-    room.roundTimer = null;
-  }
+  const t = roomTimers.get(room.id);
+  if (t) clearTimeout(t);
+  roomTimers.delete(room.id);
   room.round.endedAt = now();
   endRoundScoring(room);
   room.phase = "review";
@@ -124,7 +130,6 @@ wss.on("connection", (ws) => {
           ],
           round: null,
           review: null,
-          roundTimer: null,
           createdAt: now(),
           updatedAt: now()
         };
@@ -243,8 +248,9 @@ wss.on("connection", (ws) => {
         room.phase = "round";
         room.review = null;
         room.updatedAt = now();
-        if (room.roundTimer) clearTimeout(room.roundTimer);
-        room.roundTimer = setTimeout(() => endRound(room), Math.max(0, room.round.endsAt - now()));
+        const prev = roomTimers.get(room.id);
+        if (prev) clearTimeout(prev);
+        roomTimers.set(room.id, setTimeout(() => endRound(room), Math.max(0, room.round.endsAt - now())));
 
         send(ws, { type: "info", message: `Manche ${roundIndex} lancée.` });
         broadcast(room.id);
@@ -325,7 +331,12 @@ setInterval(() => {
   for (const [roomId, room] of rooms) {
     const anyConnected = room.players.some((p) => p.connected);
     const last = room.updatedAt ?? room.createdAt ?? 0;
-    if (!anyConnected && last < cutoff) rooms.delete(roomId);
+    if (!anyConnected && last < cutoff) {
+      const t = roomTimers.get(roomId);
+      if (t) clearTimeout(t);
+      roomTimers.delete(roomId);
+      rooms.delete(roomId);
+    }
   }
 }, 60_000).unref();
 
